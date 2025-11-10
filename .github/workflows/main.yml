@@ -1,35 +1,43 @@
 name: CI
 
 on:
-  push:
   pull_request:
-    branches-ignore:
+  push:
+    branches:
       - develop
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
   ci:
-    name: ${{ matrix.ros_distro }}
-    if: ${{ github.actor != 'RWT-bot' }}
+    name: ${{ matrix.ros_distro }} (node ${{ matrix.node_version }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        ros_distro: [melodic, noetic]
-        node_version: [14]
+        ros_distro:
+          - noetic
+          - humble
+          - jazzy
+          - kilted
+        node_version: [20, 22, 24]
+    env:
+      ROS_DISTRO: ${{ matrix.ros_distro }}
     steps:
-      - uses: actions/checkout@v2
-        env:
-          TOKEN: "${{ github.event_name == 'push' && endsWith(github.ref, 'develop') && matrix.ros_distro == 'noetic' && secrets.RWT_BOT_PAT || github.token }}"
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v6
         with:
-          token: ${{ env.TOKEN }}
-      - name: Docker pull
-        run: docker pull ros:${{ matrix.ros_distro }}-ros-core
-      - name: Docker build
-        run: docker build --build-arg ROS_DISTRO="${{ matrix.ros_distro }}" --build-arg NODE_VERSION="${{ matrix.node_version }}" -t roslibjsdocker .
-      - name: Tests
-        run: docker run -v $(pwd):/root/roslibjs --rm roslibjsdocker bash -i -c 'bash /root/roslibjs/test/build.bash'
-      - uses: stefanzweifel/git-auto-commit-action@v4
-        if: ${{ github.event_name == 'push' && github.ref == 'develop' && matrix.ros_distro == 'noetic' }}
-        with:
-          commit_message: Update Build
-          file_pattern: 'build/*.js'
+          cache: npm
+          node-version: ${{ matrix.node_version }}
+
+      - name: Install Node.js dependencies
+        run: npm ci
+
+      - name: Build JavaScript library
+        run: npm run build
+
+      - name: Run tests
+        run: npm test

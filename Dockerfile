@@ -1,18 +1,20 @@
-ARG ROS_DISTRO=melodic
-FROM ros:$ROS_DISTRO-ros-core
+ARG ROS_DISTRO=noetic
+FROM ros:${ROS_DISTRO}-ros-base
 
-ARG CI=true
-ENV CI=$CI
+# Copy package.xml and install ROS dependencies
+COPY package.xml /workspace/
+WORKDIR /workspace
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    apt-get update && \
+    rosdep update --include-eol-distros && \
+    rosdep install --from-paths . --ignore-src -y
 
-# Dependencies for rosbridge
-RUN apt update && apt-get install -y firefox git wget ros-$ROS_DISTRO-rosbridge-server ros-$ROS_DISTRO-tf2-web-republisher ros-$ROS_DISTRO-common-tutorials ros-$ROS_DISTRO-rospy-tutorials ros-$ROS_DISTRO-actionlib-tutorials
+# Copy ROS launch files and test setup
+COPY test/examples/ /workspace/test/examples/
 
-# Install nvm, Node.js and node-gyp
-ARG NODE_VERSION=14
-RUN wget -qO- https://raw.githubusercontent.com/nvm-sh/nvm/v0.38.0/install.sh | bash \
-    && . $HOME/.nvm/nvm.sh \
-    && nvm install $NODE_VERSION && nvm alias default $NODE_VERSION \
-    && npm install -g node-gyp
+# Expose rosbridge websocket port
+EXPOSE 9090
 
-RUN echo "source /opt/ros/$ROS_DISTRO/setup.bash" >> $HOME/.bashrc
-ENV PATH=/bin/versions/node/$NODE_VERSION/bin:$PATH
+# Default command runs the ROS backend for testing
+CMD ["bash", "-c", "source /opt/ros/$ROS_DISTRO/setup.bash && bash /workspace/test/examples/setup_examples.bash"]
